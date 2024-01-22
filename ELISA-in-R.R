@@ -39,59 +39,75 @@ src <- read_csv(
 df <- clean_data(src)
 
 #### Fit Model(s) ####
+# Set plate_number and type_number variables to specify plate and material type
 plate_number <- 1
 type_number <- 1
+
+# Nonlinear least squares fitting using nlsLM function
 model <- nlsLM(
   formula = response ~ Amin + ((Amax - Amin) / (1 + 2^(-B * (log_dose - log_EC50 + E * material_type)))),
-  data = df %>% filter(plate == plate_number),
+  data = df %>% filter(plate == plate_number),  # Filter data for the specified plate
   start = list(
     Amin = 0,
-    Amax = max(df$response),
+    Amax = max(df$response),  # Set upper limit of Amax to the maximum response in the dataset
     log_EC50 = 2,
     B = -1,
     E = 1
   )
 )
 
+
+# Generate a summary of the nonlinear least squares model ('model')
 model_summary <- summary(model)
+
+# Extract the coefficients from the model summary
 model_coefficients <- model_summary$coefficients
 
 
+
 #### Plot Model(s) ####
+# Create an empty data frame to store the restricted model information
 restricted_model_df <- data.frame()
 
+# Extract the 'type' corresponding to the specified 'plate_number'
 type <- df %>% 
   filter(plate == plate_number) %>% 
   distinct(type) %>% 
   pull(type)
 
+# Extract coefficients from the previously fitted model
 coefficients <- model_summary$coefficients
 
+# Create a data frame 'dat' with information related to the restricted model
 dat <- data.frame(
   plate = plate_number,
   numerator = types[type_number],
   denominator = "Standard",
   type = type[type_number],
   group = paste0(type[type_number], "_", "Standard"),
-  Amin = model_coefficients["Amin", "Estimate"],
-  Amax = model_coefficients["Amax", "Estimate"],
-  log_EC50 = model_coefficients["log_EC50", "Estimate"],
-  B = model_coefficients["B", "Estimate"],
-  E = model_coefficients["E", "Estimate"],
-  Amin_se = model_coefficients["Amin", "Std. Error"],
-  Amax_se = model_coefficients["Amax", "Std. Error"],
-  log_EC50_se = model_coefficients["log_EC50", "Std. Error"],
-  B_se = model_coefficients["B", "Std. Error"],
-  E_se = model_coefficients["E", "Std. Error"]
+  Amin = coefficients["Amin", "Estimate"],
+  Amax = coefficients["Amax", "Estimate"],
+  log_EC50 = coefficients["log_EC50", "Estimate"],
+  B = coefficients["B", "Estimate"],
+  E = coefficients["E", "Estimate"],
+  Amin_se = coefficients["Amin", "Std. Error"],
+  Amax_se = coefficients["Amax", "Std. Error"],
+  log_EC50_se = coefficients["log_EC50", "Std. Error"],
+  B_se = coefficients["B", "Std. Error"],
+  E_se = coefficients["E", "Std. Error"]
 )
 
+# Initialize 'restricted_model_df' and bind rows with two copies of 'dat'
 restricted_model_df <- data.frame()
 restricted_model_df <- bind_rows(
   restricted_model_df,
   dat %>% mutate(reference = 0),
   dat %>% mutate(reference = 1)
 ) %>% 
+  # Generate a sequence of 'x' values and create all possible combinations
   crossing(x = seq(-7.5, 2.5, 0.1)) %>% 
+  
+  # Group by 'plate' and calculate the 'y' values based on the reference
   group_by(plate) %>% 
   mutate(
     y = case_when(
@@ -100,18 +116,23 @@ restricted_model_df <- bind_rows(
     ),
     group = paste0(denominator, "_", numerator)
   ) %>% 
+  
+  # Bind rows with the original data, ordering by 'plate', 'type', and 'dose'
   bind_rows(
     .,
     df %>% 
       filter(plate == plate_number) %>% 
       arrange(plate, type, desc(dose))
   ) %>% 
+  
+  # Replace missing 'x' values with 'dose'
   mutate(
     x = case_when(
       is.na(x) ~ dose,
       TRUE ~ x
     )
   )
+
   
 d <- df %>% 
   filter(plate == plate_number) %>% 
