@@ -39,33 +39,40 @@ src <- read_csv(
 df <- clean_data(src)
 
 #### Fit Model(s) ####
-# Set plate_number and type_number variables to specify plate and material type
-plate_number <- 1
-type_number <- 1
+# Standard
+model <- nlsLM(
+  response ~ Amin + ((Amax - Amin) / (1 + 2^(-B * (log_dose - log_EC50 )))),
+  data = data
+)
 
 # Nonlinear least squares fitting using nlsLM function
-model <- nlsLM(
-  formula = response ~ Amin + ((Amax - Amin) / (1 + 2^(-B * (log_dose - log_EC50 + E * material_type)))),
-  data = df %>% filter(plate == plate_number),  # Filter data for the specified plate
+standard <- df %>% 
+  filter(type == "Standard")
+
+model_standard <- nlsLM(
+  # formula = response ~ Amin + ((Amax - Amin) / (1 + 2^(-B * (log_dose - log_EC50 + E * material_type)))),
+  formula = response ~ Amin + ((Amax - Amin) / (1 + 2^(-B * (log_dose - log_EC50)))),
+  data = standard,  # Filter data for the specified type "Standard"
   start = list(
-    Amin = 0,
-    Amax = max(df$response),  # Set upper limit of Amax to the maximum response in the dataset
+    Amin = min(standard$response),
+    Amax = max(standard$response),  # Set upper limit of Amax to the maximum response in the dataset
     log_EC50 = 2,
-    B = -1,
-    E = 1
+    B = -1
   )
 )
 
 
 # Generate a summary of the nonlinear least squares model ('model')
-model_summary <- summary(model)
+model_summary <- summary(model_standard)
 
 # Extract the coefficients from the model summary
 model_coefficients <- model_summary$coefficients
 
 
-
 #### Plot Model(s) ####
+# Standard
+make_plot(standard, model_standard)
+
 # Create an empty data frame to store the restricted model information
 restricted_model_df <- data.frame()
 
